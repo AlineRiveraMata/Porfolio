@@ -1,0 +1,294 @@
+---
+title: "project4_draft"
+author: "Eya MAHDHAOUI , Manon CASTANET, Aline RIVERA, Pedro José TRILLOS"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction:  
+
+Payment defaults occur when a person fails to pay or reimburse what they owe. This is a recurring topic in finance since there are always people who are not able to pay their debts or simply do not have the will to do so. Because of this, it is extremely valuable for creditors to estimate what a person's probability of payment default will be as it is a tool that can allow them to adjust their decision-making process.
+
+In this project we take a closer look at the case of credit card payment defaults. We possess a dataset with information of 30000 clients with a credit card. This dataset tells us the amount of given credit to the clients (LIMIT_BAL), their gender (SEX), their education level (EDUCATION), their marital status (MARRIAGE), their age (AGE), their payment history (PAY_0-PAY_6), their dollar amount of bill statements (BILL_AMT1-BILL_AMT6), the dollar amount of previous payments (PAY_AMT1-PAY_AMT6), and finally whether they defaulted or not they will default next month (default payment next month). We could say this is a representative sample of the credit card holders for the company this dataset belongs to, and therefore, estimating the probability of default with this sample could lead to conclude what the probabiliy of default of their card holder population is.
+
+For this, we will create a logistic regression model (frequently used when dealing with probabilities) that will allow us to obtain what the probability of default of each observation is through its coefficients using the formula p(x)=e^(n(x))/(1+e^(n(x))) which R calculates automatically with the 'predict' function. Having calculated these probabilities, it will be possible to calculate a generalized probability by simply obtaining their mean.
+
+Furthermore, we would also like to use a logistic regression model, not to calculate the probability of default of the credit card holders, but to calculate the probability that a person with certain established values for each of the independent variables (default payment will turn into a independent variable now) is a male. 
+
+## Methodology and Findings:
+
+We start by importing the data. For simplicity, we rename the dependent variable 'default payment next month' to 'def_pay'. 
+
+```{r cars}
+library("readxl")
+setwd('~/Documents/R/Economic Modelling')
+data = read_excel("credit_card_clients.xls",col_names = TRUE, skip= 1)
+colnames(data)[24] = "def_pay"
+View(data)
+```  
+
+We now convert the values in our data to string variables and make a summary of what we have. Some of the most valuable information that it is possible to retrieve from the summary is that the average age of the cardholders in the sample is 35 years approximately, that the sample is almost equally distributed among female and male observations (infered from the 1.6 mean in the variable SEX) as well as married and unmarried people (mean of 1.5). We see that the youngest person in the sample is 21 years old, while the oldest is 79. It is also possible to compare the average of mean dollar payments vs bills for each period which may give us hints about whether the clients default or not.
+
+```{r}
+str(data)
+summary(data)
+```
+
+To go further on with the statistical analysis, we can make a cross table of the percentage of people in the sample who are expected to default in their credit card payments next month and the percentage of people who are not expected to default in their credit card payments next month. This will also serve as a reference point of whether the estimations of default probability that we obtain using the logistic regression model are accurate or not.
+
+From the cross table we see that 22.1% of the clients in the sample are expected to default in their payments next month, while the other 77.9% is expected to fulfill them in a timely manner. Most financial analysts would consider this is an appropriate percentage of people who pay their debts. In banking, it is very unlikely that everyone will be able to pay their credit card debts and while they try to keep that number in the lowest possible, they expect and prepare (shape their financial decisions accordingly) for a significant amount of defaults. 
+
+```{r}
+library(gmodels)
+CrossTable(data$def_pay) 
+```  
+
+We are now able to proceed with the model creation. To create a logistic regression we call the command glm (which stands for generalized linear model) and adjust it to the family binomial (since we have a dichotomous dependent variable) and to a 'logit' regression (since we are using it to estimate probabilities). From the summary, it is possible to observe that 13 out of the 23 independent variables are significant as they have p-values lower than at least 0.1 (most of them, though, are lower than 0.001).
+
+```{r}
+log.model <- glm(def_pay ~., data = data, family = binomial(link = "logit"))
+summary(log.model)
+```  
+
+The estimated coefficients are what will help us to estimate the default probability. To do so, we shall first create a data frame of just the independent variables.
+
+```{r}
+data_test = data[,-24]
+```
+
+Then, we can proceed to call the predict function. Establishing the type 'response' we tell R to follow the probability formula p(x)=e^(n(x))/(1+e^(n(x))) where n(x) is the sum the intercept coefficient plus every beta coefficient multiplied by the value of each variable according to the observation the probability is being calculated for.
+
+```{r}
+log.predictions1 <- predict(log.model, data_test, type="response")
+```
+
+Therefore, we have obtained the probability of default of each of the 30000 clients according to our logistic regression model. To illustrate this, we show the first 10 probabilities of default obtained. With this, we can see for example that for person 5, the probability of default is very low (13.78%) while it coincides with the expectation in the dataset that this person will not default in their credit card payments next month. However, as this is a model that tries to fit as best as possible all of the 30000 observation values of people with very different characteristics and financial behavior, there is room for error. For example, person 2 also has a very low estimated probability of default (15%), but the dataset indicates that they are expected to default next month. The reader should therefore be cautious when analyzing these individual probabilities of default. 
+
+```{r}
+head(log.predictions1,10)
+```  
+
+For easier visualization of the estimated probabilities of default and the actual estimation of whether they are expected to default or not, we can add this new variable of probabilities to our dataset.
+
+```{r}
+data$probability_of_default = log.predictions1
+View(data)
+```
+
+Now, we can calculate a general probability of default for the 30000 observations in our dataset. We do this by obtaining the mean of each individual probability. This results in a probability of 22.12% of default, coinciding with what we previously obtained in the cross table. This suggests our logistic regression model is appropriate to predict the overall probability that clients (regardless of their background and characteristics) of the company in question will not pay their dues in the following month.
+
+```{r}
+general_probability_of_default = mean(data$probability_of_default)
+View(general_probability_of_default)
+```
+
+We wish to explore what would happen if we only kept the significant variables in our model to estimate the probability. We will be looking for whether it affects the estimated general probability or if it remains the same. For this, we perform the step Akaike analysis.
+
+```{r}
+library(MASS)
+stepAIC(log.model)
+```
+
+Running the previous code we can determine that LIMIT_BAL, SEX, EDUCATION, MARRIAGE, AGE,PAY_0, PAY_2, PAY_3, PAY_5, BILL_AMT1, BILL_AMT2, BILL_AMT5, PAY_AMT1, PAY_AMT2, PAY_AMT3, PAY_AMT4, and PAY_AMT5 are the significant variables to estimate the default probability. We reduce our data frame to these variables and estimate a new model using them. We observe by comparing the summary of this model and the previous that the coefficients have changed (some more significantly than others) which is comprehensible since we now have fewer explanatory variables that need to explain an unchanged dependent variable. 
+
+```{r} 
+data2 =data[,c("LIMIT_BAL","SEX","EDUCATION","MARRIAGE", 
+    "AGE","PAY_0","PAY_2", "PAY_3", "PAY_5","BILL_AMT1","BILL_AMT2", 
+    "BILL_AMT5","PAY_AMT1","PAY_AMT2","PAY_AMT3","PAY_AMT4","PAY_AMT5","def_pay")]
+
+log.model2 = glm(def_pay ~., data = data2, family = binomial(link = "logit"))
+summary(log.model2)
+```
+
+It is now necessary to repeat the process of probability prediction using this reduced set of variables.
+
+```{r}
+log.predictions2 <- predict(log.model2, data_test, type="response")
+```  
+
+```{r}
+head(log.predictions2,10)
+```  
+
+```{r}
+data$probability_of_default2 = log.predictions2
+View(data)
+```
+
+We find something interesting. As stated before, the coefficients of the variables have changed. However the individual estimated probabilities of default using this model with only significant variables remain exactly the same as the probabilities estimated with the model that includes all 23 independent variables. Therefore, nothing less than having the same exact mean of probabilities would be expected.
+
+```{r}
+general_probability_of_default2 = mean(data$probability_of_default2)
+View(general_probability_of_default2)
+```
+
+As stated, the general probability of default of the company's clients remains unaltered, it is still 22.12%.
+
+We would like to try changing the model one last time to see if the probability changes. We suspect a certain degree of multicolinearity (the existence of correlation among independent variables) to be present in our data set. Younger people are least likely to be married than older people (correlation between AGE and MARRIAGE). Older people are more likely to have a higher grade of education than younger people (correlation between AGE and EDUCATION). The higher the dollar amount of bills of a client, the higher the dollar amount of payments must be (correlation between the BILLS_AMT and PAY_AMT variables). This could be interfering with the models precision and ability to estimate de default probabilities. An easy and common way in which multicolinearity can be reduced (only at a certain degree) is to mean center the variables. This means to take away the mean of a variable from itself. We will do this for every significant (according to step Akaike) continous variable.
+
+```{r}
+limit_bal_m = data$LIMIT_BAL - mean(data$LIMIT_BAL)
+age_m = data$AGE - mean(data$AGE)
+bill_amt1_m = data$BILL_AMT1 - mean(data$BILL_AMT1)
+pay_amt1_m = data$PAY_AMT1 - mean(data$PAY_AMT1)
+pay_amt2_m = data$PAY_AMT2 - mean(data$PAY_AMT2)
+pay_amt4_m = data$PAY_AMT4 - mean(data$PAY_AMT4)
+pay_amt5_m = data$PAY_AMT5 - mean(data$PAY_AMT5)
+```  
+
+With this new mean centered variables created we proceed to make a third logistic regression. We see from the summary that for some variables (not restricted to the ones that were mean centered) have changed their estimated coefficients while other have remained the same.
+
+```{r}
+data3 = data.frame(limit_bal_m , data$SEX,age_m,data$EDUCATION, data$MARRIAGE,data$PAY_0,data$PAY_2, data$PAY_3,data$PAY_5,  bill_amt1_m ,data$BILL_AMT2,data$BILL_AMT5, pay_amt1_m, pay_amt2_m,data$PAY_AMT3,pay_amt4_m,pay_amt5_m, data$def_pay)
+
+log.model3 = glm(data.def_pay~. ,data=data3, family = binomial(link = "logit"))
+summary(log.model3)
+```
+
+We now take on the task of estimating the probabiliy of default using this last logistic model of mean centered significant variables.
+
+```{r}
+ncol(data3)
+```
+
+```{r}
+data_test2 = data3[,-18]
+```
+
+Once more, we see that despite that some coefficients have shifted their values in comparison to the previous models, the individual default probabilities remain the exact same.
+
+```{r}
+log.predictions3= predict(log.model3, data_test2, type="response")
+head(log.predictions3,10)
+```
+
+```{r}
+data$probability_of_default3 = log.predictions3
+View(data)
+```
+
+As in the previous case, the general probability of default of this company's credit card clients is unaltered; it is still 22.12%.
+
+```{r}
+general_probability_of_default3 = mean(data$probability_of_default3)
+View(general_probability_of_default3)
+```
+
+We now move on to another subject. We wish to create a model that can help us estimate the probability that a client with certain characteristics is male based on the information included in our dataset. First of all, we delete the probability of default variables that we had added in the previous part to restore it to its original version and call it data_male.
+
+```{r}
+data_male = subset(data, select = -c(probability_of_default,probability_of_default2,probability_of_default3))
+View(data_male)
+```
+
+We now construct the data frame of the characteristics of the person we will be analyzing. As seen, this has values for all of the 23 independent variables in our dataset.
+
+```{r}
+person1 <- data.frame (LIMIT_BAL= 170000,
+                  EDUCATION = 1,
+                  MARRIAGE  = 1,
+                  AGE = 35,
+                  PAY_0 = 0,  
+                  PAY_2 = 0,
+                  PAY_3 = -1 ,
+                  PAY_4 = -1,
+                  PAY_5 = -1,
+                  PAY_6 = -1,
+                  BILL_AMT1 = 86239,
+                  BILL_AMT2 = 75600 ,
+                  BILL_AMT3= 2800,
+                  BILL_AMT4 = 21881,
+                  BILL_AMT5 = 0 ,
+                  BILL_AMT6 = 6780,      
+                  PAY_AMT1 = 1512  ,
+                  PAY_AMT2 = 2800   ,
+                  PAY_AMT3 = 21881 ,
+                  PAY_AMT4= 0,
+                  PAY_AMT5= 6780 , 
+                  PAY_AMT6 = 530 ,
+                  def_pay = 0
+                  )
+```  
+
+We also have a reduced version of characteristics of this person. We will do models and estimate the probabilities using both sets.
+
+```{r}
+reduced_person1 <- data.frame (LIMIT_BAL= 170000,
+                  EDUCATION = 1,
+                  MARRIAGE  = 1,
+                  AGE = 35,
+                  PAY_0 = 0,  
+                  PAY_2 = 0,
+                  PAY_3 = -1 ,
+                  PAY_4 = -1,
+                  PAY_5 = -1,
+                  PAY_6 = -1,
+                  BILL_AMT1 = 86239,
+                  BILL_AMT2 = 0 ,
+                  BILL_AMT3= 0,
+                  BILL_AMT4 = 0,
+                  BILL_AMT5 = 0 ,
+                  BILL_AMT6 = 0,      
+                  PAY_AMT1 = 0 ,
+                  PAY_AMT2 = 0   ,
+                  PAY_AMT3 = 0 ,
+                  PAY_AMT4= 0,
+                  PAY_AMT5= 0 , 
+                  PAY_AMT6 = 0,
+                  def_pay = 0
+                  )
+```  
+
+As for R a dichotomous dependent variable can only take values of 1 and 0 we change female from taking the value of 2 to taking the value of 0, while male remains with the value of 1.
+
+```{r}
+data["SEX"][data["SEX"] == 2] <- 0
+```
+
+We use the same methodology as with the default of payments. First we need to specify the logistic regression whose coefficients will aid to estimate the probability of the client being male. This time, evidently, SEX will be the dependent variable while the rest (including payment default next month) will be the independent variables. We see from the summary that we have 13 significant variables.
+
+```{r}
+model4 =glm(SEX ~., data = data_male, family = binomial(link = "logit"))
+summary(model4)
+```  
+
+We will first estimate the probability of the client being male using the full set of characteristics. We call again the function 'predict' with the type 'response' on our new model and we specify that we want the probability calculated for the 'person1' data frame.
+
+```{r}
+prob_male=predict(model4, person1, type="response")
+```  
+
+It is found that a person who has the characteristics described in the data frame 'person1' has a 40.76% probability of being male. This means that the person in question is most likely a female. Since the next data frame is simply a reduced version of the same characteristics, we expect the returned probability of the next data frame to be very similar to what we have found here.
+
+```{r}
+prob_male
+```  
+
+We carry out exactly the same process, only changing the used data frame to that of 'reduced_person1'.
+
+```{r}
+prob2_male=predict(model4, reduced_person1, type="response")
+```  
+
+Indeed, the probability of being male using this reduced set of characteristics is very close to the one obtained with the larger set of characteristics. It is 38.05%, supporting the theory that this person is most likely a female rather than a male.
+
+```{r}
+prob2_male
+```
+
+## Conclusion
+
+Using logistic regressions, we have been able to calculate a general probability of payment default in the next month for the clients of the company whose dataset we have. There is an overall probability that a client will default on their credit card payments of 22.12%; an acceptable probability that a well-established financial institution can surely deal with and make the necessary decision-making process adjustments with ease. We were curious to see how the probability would differ if we took into account only the significant variables in the model, and if we faced the problem of multicolinearity by mean centering the continuous significant variables. The answer to our curiosity was that the probability would remain unchanged. In our three attempts, the probability was 22.12%. We have proven that logistic regression is an adequate tool in estimating probabilities since 22.12% was indeed the percentage of people who were expected to default according to our dataset.
+
+On the other hand, by applying the same methodology, we found that a person with the given characteristics was most likely a female, not a male. With the full list of characteristics the estimated probability was a 40.76% chance of the person being male (a 59.24% chance of being female), while with the reduced list of characteristics this value was of 38.05% (a 61.95% of being female).
+
+
+
+
+
